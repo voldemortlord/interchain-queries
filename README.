@@ -1,107 +1,129 @@
-# Stride Testneti Kurulum 
+# Task-9 Rehber
 
-<img width="431" alt="stride111" src="https://user-images.githubusercontent.com/107190154/184557695-bc92418f-1eb8-4514-ae06-d89802efda9a.png">
+## 🛰  Relayer Tasks 
 
->( Chain 4 )
+| #     | Pts |  Task                                                                                                             | Evidence                                                                           | Instructions      |
+| ----- | --- | ----------------------------------------------------------------------------------------------------------------- |:----------------------------------------------------------------------------------:| ----------------- |
+| **9** | 750 | relay interchain queries using the new [v2 go relayer](https://github.com/cosmos/relayer/releases/tag/v2.0.0-rc4) | link to ICQ packets relayed and link to the configured relayer fork on your github | - |
 
-> [Snapshotla ya da state sync ile kurmak için](https://nodejumper.io/)
+**Form :point_down:**
+> https://docs.google.com/forms/d/e/1FAIpQLSeoZEC5kd89KCQSJjn5Zpf-NQPX-Gc8ERjTIChK1BEbiVfMVQ/viewform
 
-> Halihazırda stride kuruluysa sunucunuzda [buradaki](https://github.com/brsbrc/Testnetler-ve-Rehberler/blob/main/Stride/Y%C3%BCkseltmeler/Stride-Testnet-4.md) adımları takip ederek yeni chaine yani chain-4'e geçebilirsiniz.
-
-
-### System requirements 
-
-|CPU | RAM  | Disk  | 
-|----|------|----------|
-|   4| 8GB  | 400GB    |
-
-
+## Binary Dosyasını İndirelim
 ```
-wget -O stride.sh https://raw.githubusercontent.com/brsbrc/Testnetler-ve-Rehberler/main/Stride/stride.sh && chmod +x stride.sh && ./stride.sh
+cd $HOME
+git clone https://github.com/Stride-Labs/interchain-queries.git
+cd interchain-queries
+go build
+sudo mv interchain-queries /usr/local/bin/icq
 ```
 
-### Log kontrol komutundan sonra log komutu tepki vermiyorsa şu komutu girip ardından yeniden log kontrol yapın.
-
+## Yapılandırma Dosyamızı Ayarlayalım
 ```
-systemctl restart systemd-journald
-```
-
-### Sync true/false
-
-```
-strided status 2>&1 | jq .SyncInfo
-```
-
-### Faucet :  ( https://discord.gg/rDZPaqYd )
-
-### Validator Olmak İçin;
-
-```
-strided tx staking create-validator \
-  --amount 9900000ustrd \
-  --from cüzdanisminiz \
-  --commission-max-change-rate "0.01" \
-  --commission-max-rate "0.2" \
-  --commission-rate "0.07" \
-  --min-self-delegation "1" \
-  --pubkey  $(strided tendermint show-validator) \
-  --moniker nodeisminiz \
-  --chain-id=STRIDE-TESTNET-4 
-```
-
-```
-Ping Pub - https://poolparty.stride.zone
-NodesGuru - https://stride.explorers.guru
-Cosmostation - https://testnet.mintscan.io/stride-testnet
-```
-
-
-## Stride Önemli Komutlar
-
-### Cüzdandan cüzdana token transfer
-
-```
-strided tx bank send gönderencüzdanadresi alıcıcüzdanadresi 1000000ustrd --chain-id=STRIDE-TESTNET-4 --from cüzdanisminiz --fees=250ustrd -y
+cd $HOME && mkdir .icq
+sudo tee $HOME/.icq/config.yaml > /dev/null <<EOF
+default_chain: stride-testnet
+chains:
+  gaia-testnet:
+    key: wallet
+    chain-id: GAIA
+    rpc-addr: http://127.0.0.1:buraya      # Gaia RPC yazacağız
+    grpc-addr: http://127.0.0.1:buraya     # Gaia GRPC yazacağız
+    account-prefix: cosmos
+    keyring-backend: test
+    gas-adjustment: 1.2
+    gas-prices: 0.001uatom
+    key-directory: /root/.icq/keys
+    debug: false
+    timeout: 20s
+    block-timeout: ""
+    output-format: json
+    sign-mode: direct
+  stride-testnet:
+    key: wallet
+    chain-id: STRIDE-TESTNET-4
+    rpc-addr: http://127.0.0.1:buraya      # Stride RPC yazacağız
+    grpc-addr: http://127.0.0.1:buraya     # Stride GRPC yazacağıze
+    account-prefix: stride
+    keyring-backend: test
+    gas-adjustment: 1.2
+    gas-prices: 0.001ustrd
+    key-directory: /root/.icq/keys
+    debug: false
+    timeout: 20s
+    block-timeout: ""
+    output-format: json
+    sign-mode: direct
+cl: {}
+EOF
 ```
 
-### Kendi validatorumuze delege etme
-
+## Cüzdanımızı İmport Edelim
+> NOT: Lütfen, aynı cüzdanınızı kullanın. Farklı cüzdanlar kullanmayın. Node cüzdanınız, relayer çalıştırdığınız cüzdanınız olsun.
 ```
-strided tx staking delegate validatorAddress 10000000ustrd --from=WalletName --chain-id=STRIDE-TESTNET-4 --gas=auto
+icq keys restore --chain stride-testnet wallet
+icq keys restore --chain gaia-testnet wallet
 ```
+> Mnemonıcleri isteyecektir.
 
-### Redelege yapma
-
+## Icq Servis Dosyamızı Oluşturalım
 ```
-strided tx staking redelegate gönderenvalidatoradres alıcıvalidatoradres 1000000ustrd --chain-id=STRIDE-TESTNET-4 --from cüzdan --gas=250000 --fees=500ustrd -y
-```
+sudo tee /etc/systemd/system/icqd.service > /dev/null <<EOF
+[Unit]
+Description=Interchain Query Service
+After=network-online.target
 
-### Log kontrol
+[Service]
+User=$USER
+ExecStart=$(which icq) run --debug
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=65535
 
-```
-journalctl -u strided -f -o cat
-```
-
-### Sync durumu
-
-```
-curl -s localhost:16657/status | jq .result.sync_info
-```
-
-### Unjail komutu
-
-```
-strided tx slashing unjail --from=Cüzdanismi --chain-id=STRIDE-TESTNET-4 --gas-prices=0.025ustrd
+[Install]
+WantedBy=multi-user.target
+EOF
 ```
 
-### Delete stride
+## Servisi Başlatalım
+```
+sudo systemctl daemon-reload
+sudo systemctl enable icqd
+sudo systemctl restart icqd
+```
 
+## Log Kontrol
 ```
-sudo systemctl stop strided
-sudo systemctl disable strided
-sudo rm /etc/systemd/system/stride* -rf
-sudo rm $(which strided) -rf
-sudo rm $HOME/.stride* -rf
-sudo rm $HOME/stride -rf
-sed -i '/STRIDE_/d' ~/.bash_profile
+journalctl -u icqd -f -o cat
 ```
+
+**Logların görünmesi 10-15 dakika sürebilir, beklemelisiniz:**
+
+### Örnek Çıktı;
+```
+store/bank/key
+height parsed from GetHeightFromMetadata= 0
+Fetching client update for height height 176886
+store/bank/key
+height parsed from GetHeightFromMetadata= 0
+Fetching client update for height height 176886
+Requerying lightblock
+Requerying lightblock
+Requerying lightblock
+ICQ RELAYER | query.Height= 0
+ICQ RELAYER | res.Height= 176885
+Requerying lightblock
+ICQ RELAYER | query.Height= 0
+ICQ RELAYER | res.Height= 176885
+Send batch of 4 messages
+1 ClientUpdate message
+1 SubmitResponse message
+1 ClientUpdate message
+1 SubmitResponse message
+Sent batch of 2 (deduplicated) messages
+```
+
+**Tx'leri, explorerdan Kontrol Edelim**
+>https://poolparty.stride.zone/GAIA<
+>https://poolparty.stride.zone/STRIDE<
+>https://stride.explorers.guru/<
